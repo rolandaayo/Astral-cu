@@ -15,8 +15,7 @@ app.use(express.json());
 const port = process.env.PORT || 5001;
 
 const uri =
-  process.env.MONGODB_URI ||
-  "mongodb+srv://admin:admin@cluster0.f1a1v.mongodb.net/myFirstDatabase?retryWrites=true&w=majority";
+  process.env.MONGODB_URI ;
 const clientOptions = {
   serverApi: { version: "1", strict: true, deprecationErrors: true },
 };
