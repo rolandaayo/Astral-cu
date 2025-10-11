@@ -130,6 +130,14 @@ app.post("/api/login", async (req, res) => {
         id: user._id,
         email: user.email,
         name: user.name,
+        balance: user.balance || 0,
+        cryptoBalances: user.cryptoBalances || {
+          dodge: 0,
+          eth: 0,
+          btc: 0,
+          spacex: 0,
+        },
+        lastTopUp: user.lastTopUp,
       },
     });
   } catch (error) {
@@ -163,6 +171,14 @@ app.post("/api/signup", async (req, res) => {
         id: user._id,
         email: user.email,
         name: user.name,
+        balance: user.balance || 0,
+        cryptoBalances: user.cryptoBalances || {
+          dodge: 0,
+          eth: 0,
+          btc: 0,
+          spacex: 0,
+        },
+        lastTopUp: user.lastTopUp,
       },
     });
   } catch (error) {
@@ -249,6 +265,39 @@ app.put("/api/users/:userId/balance", async (req, res) => {
     res
       .status(500)
       .json({ message: "Error updating balance", error: error.message });
+  }
+});
+
+// Get current user (authenticated)
+app.get("/api/users/me", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await AuthUserModel.findById(decoded.userId, { password: 0 });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      balance: user.balance || 0,
+      cryptoBalances: user.cryptoBalances || {
+        dodge: 0,
+        eth: 0,
+        btc: 0,
+        spacex: 0,
+      },
+      lastTopUp: user.lastTopUp,
+    });
+  } catch (error) {
+    res.status(401).json({ message: "Invalid token" });
   }
 });
 
