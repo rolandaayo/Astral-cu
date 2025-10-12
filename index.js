@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const bycrypt = require("bcryptjs");
 const cors = require("cors");
+const nodemailer = require("nodemailer");
 const UserModel = require("./models/Users");
 const AuthUserModel = require("./models/AuthUser");
 const dotenv = require("dotenv");
@@ -14,8 +15,63 @@ app.use(cors());
 app.use(express.json());
 const port = process.env.PORT || 5001;
 
-const uri =
-  process.env.MONGODB_URI ;
+// Email transporter setup
+const transporter = nodemailer.createTransporter({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Generate 6-digit verification code
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Send verification email
+const sendVerificationEmail = async (email, code) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: "Astral Credit Union - Email Verification",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1E5BA8, #163f75); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 28px;">Astral Credit Union</h1>
+          <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Email Verification</p>
+        </div>
+        <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px;">
+          <h2 style="color: #333; margin-bottom: 20px;">Verify Your Email Address</h2>
+          <p style="color: #666; margin-bottom: 25px;">Thank you for signing up with Astral Credit Union. Please use the verification code below to complete your registration:</p>
+          
+          <div style="background: white; border: 2px solid #1E5BA8; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
+            <h1 style="color: #1E5BA8; font-size: 36px; margin: 0; letter-spacing: 5px; font-family: monospace;">${code}</h1>
+          </div>
+          
+          <p style="color: #666; margin-bottom: 20px;">This code will expire in 10 minutes for security purposes.</p>
+          <p style="color: #666; margin-bottom: 0;">If you didn't create an account with us, please ignore this email.</p>
+          
+          <hr style="border: none; border-top: 1px solid #ddd; margin: 25px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from Astral Credit Union. Please do not reply to this email.
+          </p>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Verification email sent to ${email}`);
+    return true;
+  } catch (error) {
+    console.error("Error sending email:", error);
+    return false;
+  }
+};
+
+const uri = process.env.MONGODB_URI;
 const clientOptions = {
   serverApi: { version: "1", strict: true, deprecationErrors: true },
 };
@@ -119,6 +175,14 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
+    // Check if email is verified (skip for admin)
+    if (email !== "admin@astral.com" && !user.isEmailVerified) {
+      return res.status(403).json({
+        message: "Please verify your email before logging in",
+        needsVerification: true,
+      });
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
@@ -130,6 +194,7 @@ app.post("/api/login", async (req, res) => {
         email: user.email,
         name: user.name,
         balance: user.balance || 0,
+        isEmailVerified: user.isEmailVerified,
         cryptoBalances: user.cryptoBalances || {
           dodge: 0,
           eth: 0,
@@ -153,24 +218,40 @@ app.post("/api/signup", async (req, res) => {
     }
 
     const hashedPassword = await bycrypt.hash(password, 10);
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
     const user = await AuthUserModel.create({
       name,
       email,
       password: hashedPassword,
+      verificationCode,
+      verificationCodeExpires: verificationExpires,
+      isEmailVerified: false,
     });
+
+    // Send verification email
+    const emailSent = await sendVerificationEmail(email, verificationCode);
+    if (!emailSent) {
+      return res
+        .status(500)
+        .json({ message: "Failed to send verification email" });
+    }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
 
     res.status(201).json({
-      message: "User created successfully",
+      message:
+        "User created successfully. Please check your email for verification code.",
       token: token,
       user: {
         id: user._id,
         email: user.email,
         name: user.name,
         balance: user.balance || 0,
+        isEmailVerified: user.isEmailVerified,
         cryptoBalances: user.cryptoBalances || {
           dodge: 0,
           eth: 0,
@@ -185,6 +266,117 @@ app.post("/api/signup", async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
+// Send verification email
+app.post("/api/auth/send-verification", async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await AuthUserModel.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ message: "Email is already verified" });
+    }
+
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    user.verificationCode = verificationCode;
+    user.verificationCodeExpires = verificationExpires;
+    await user.save();
+
+    const emailSent = await sendVerificationEmail(email, verificationCode);
+    if (!emailSent) {
+      return res
+        .status(500)
+        .json({ message: "Failed to send verification email" });
+    }
+
+    res.json({
+      message: "Verification email sent successfully",
+      success: true,
+    });
+  } catch (error) {
+    console.error("Send verification error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// Verify email with code
+app.post("/api/auth/verify-email", async (req, res) => {
+  const { email, code } = req.body;
+  try {
+    const user = await AuthUserModel.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ message: "Email is already verified" });
+    }
+
+    if (!user.verificationCode || user.verificationCode !== code) {
+      return res.status(400).json({ message: "Invalid verification code" });
+    }
+
+    if (new Date() > user.verificationCodeExpires) {
+      return res.status(400).json({ message: "Verification code has expired" });
+    }
+
+    user.isEmailVerified = true;
+    user.verificationCode = null;
+    user.verificationCodeExpires = null;
+    await user.save();
+
+    res.json({
+      message: "Email verified successfully",
+      success: true,
+    });
+  } catch (error) {
+    console.error("Verify email error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// Resend verification code
+app.post("/api/auth/resend-verification", async (req, res) => {
+  const { email } = req.body;
+  try {
+    const user = await AuthUserModel.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({ message: "Email is already verified" });
+    }
+
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    user.verificationCode = verificationCode;
+    user.verificationCodeExpires = verificationExpires;
+    await user.save();
+
+    const emailSent = await sendVerificationEmail(email, verificationCode);
+    if (!emailSent) {
+      return res
+        .status(500)
+        .json({ message: "Failed to send verification email" });
+    }
+
+    res.json({
+      message: "Verification code resent successfully",
+      success: true,
+    });
+  } catch (error) {
+    console.error("Resend verification error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 app.get("/", (rmeq, res) => {
   UserModel.find({})
     .then((users) => res.json(users))
@@ -287,6 +479,7 @@ app.get("/api/users/me", async (req, res) => {
       email: user.email,
       name: user.name,
       balance: user.balance || 0,
+      isEmailVerified: user.isEmailVerified,
       cryptoBalances: user.cryptoBalances || {
         dodge: 0,
         eth: 0,

@@ -12,6 +12,9 @@ const AuthUserSchema = new mongoose.Schema({
     spacex: { type: Number, default: 0 },
   },
   lastTopUp: { type: Date, default: null },
+  isEmailVerified: { type: Boolean, default: false },
+  verificationCode: { type: String, default: null },
+  verificationCodeExpires: { type: Date, default: null },
 });
 
 const AuthUserModel = mongoose.model("authuser", AuthUserSchema);
