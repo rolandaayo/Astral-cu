@@ -32,7 +32,7 @@ app.use(express.json());
 const port = process.env.PORT || 5001;
 
 // Email transporter setup
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.EMAIL_USER,
@@ -44,6 +44,20 @@ const transporter = nodemailer.createTransporter({
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
+
+// Temporary storage for unverified users (in production, use Redis or similar)
+const pendingUsers = new Map();
+
+// Clean up expired pending users every 5 minutes
+setInterval(() => {
+  const now = new Date();
+  for (const [email, userData] of pendingUsers.entries()) {
+    if (now > userData.verificationCodeExpires) {
+      pendingUsers.delete(email);
+      console.log(`Removed expired pending user: ${email}`);
+    }
+  }
+}, 5 * 60 * 1000); // 5 minutes
 
 // Send verification email
 const sendVerificationEmail = async (email, code) => {
@@ -228,54 +242,49 @@ app.post("/api/login", async (req, res) => {
 app.post("/api/signup", async (req, res) => {
   const { name, email, password } = req.body;
   try {
+    // Check if user already exists in database
     const existingUser = await AuthUserModel.findOne({ email: email });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
+    }
+
+    // Check if user is already pending verification
+    if (pendingUsers.has(email)) {
+      return res.status(400).json({
+        message:
+          "Verification email already sent. Please check your email or try again later.",
+      });
     }
 
     const hashedPassword = await bycrypt.hash(password, 10);
     const verificationCode = generateVerificationCode();
     const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    const user = await AuthUserModel.create({
+    // Store user data temporarily (NOT in database yet)
+    pendingUsers.set(email, {
       name,
       email,
       password: hashedPassword,
       verificationCode,
       verificationCodeExpires: verificationExpires,
-      isEmailVerified: false,
+      createdAt: new Date(),
     });
 
     // Send verification email
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
+      // Remove from pending if email fails
+      pendingUsers.delete(email);
       return res
         .status(500)
         .json({ message: "Failed to send verification email" });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
-
     res.status(201).json({
       message:
-        "User created successfully. Please check your email for verification code.",
-      token: token,
-      user: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        balance: user.balance || 0,
-        isEmailVerified: user.isEmailVerified,
-        cryptoBalances: user.cryptoBalances || {
-          dodge: 0,
-          eth: 0,
-          btc: 0,
-          spacex: 0,
-        },
-        lastTopUp: user.lastTopUp,
-      },
+        "Verification email sent. Please check your email and verify to complete registration.",
+      needsVerification: true,
+      email: email,
     });
   } catch (error) {
     console.error("Signup error:", error);
@@ -287,21 +296,27 @@ app.post("/api/signup", async (req, res) => {
 app.post("/api/auth/send-verification", async (req, res) => {
   const { email } = req.body;
   try {
-    const user = await AuthUserModel.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    // Check if user is already verified in database
+    const existingUser = await AuthUserModel.findOne({ email });
+    if (existingUser && existingUser.isEmailVerified) {
+      return res.status(400).json({ message: "Email is already verified" });
     }
 
-    if (user.isEmailVerified) {
-      return res.status(400).json({ message: "Email is already verified" });
+    // Check if user is in pending verification
+    const pendingUser = pendingUsers.get(email);
+    if (!pendingUser) {
+      return res.status(404).json({
+        message: "No pending verification found. Please sign up first.",
+      });
     }
 
     const verificationCode = generateVerificationCode();
     const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    user.verificationCode = verificationCode;
-    user.verificationCodeExpires = verificationExpires;
-    await user.save();
+    // Update pending user with new code
+    pendingUser.verificationCode = verificationCode;
+    pendingUser.verificationCodeExpires = verificationExpires;
+    pendingUsers.set(email, pendingUser);
 
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
@@ -324,31 +339,62 @@ app.post("/api/auth/send-verification", async (req, res) => {
 app.post("/api/auth/verify-email", async (req, res) => {
   const { email, code } = req.body;
   try {
-    const user = await AuthUserModel.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    // Check if user is in pending verification
+    const pendingUser = pendingUsers.get(email);
+    if (!pendingUser) {
+      return res
+        .status(404)
+        .json({ message: "No pending verification found for this email" });
     }
 
-    if (user.isEmailVerified) {
-      return res.status(400).json({ message: "Email is already verified" });
-    }
-
-    if (!user.verificationCode || user.verificationCode !== code) {
+    if (pendingUser.verificationCode !== code) {
       return res.status(400).json({ message: "Invalid verification code" });
     }
 
-    if (new Date() > user.verificationCodeExpires) {
-      return res.status(400).json({ message: "Verification code has expired" });
+    if (new Date() > pendingUser.verificationCodeExpires) {
+      // Remove expired pending user
+      pendingUsers.delete(email);
+      return res.status(400).json({
+        message: "Verification code has expired. Please sign up again.",
+      });
     }
 
-    user.isEmailVerified = true;
-    user.verificationCode = null;
-    user.verificationCodeExpires = null;
-    await user.save();
+    // Verification successful - now create the user in MongoDB
+    const user = await AuthUserModel.create({
+      name: pendingUser.name,
+      email: pendingUser.email,
+      password: pendingUser.password,
+      isEmailVerified: true,
+      balance: 0,
+      cryptoBalances: {
+        dodge: 0,
+        eth: 0,
+        btc: 0,
+        spacex: 0,
+      },
+    });
+
+    // Remove from pending users
+    pendingUsers.delete(email);
+
+    // Generate token for the new user
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
 
     res.json({
-      message: "Email verified successfully",
+      message: "Email verified successfully! Account created.",
       success: true,
+      token: token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        balance: user.balance,
+        isEmailVerified: user.isEmailVerified,
+        cryptoBalances: user.cryptoBalances,
+        lastTopUp: user.lastTopUp,
+      },
     });
   } catch (error) {
     console.error("Verify email error:", error);
@@ -360,21 +406,27 @@ app.post("/api/auth/verify-email", async (req, res) => {
 app.post("/api/auth/resend-verification", async (req, res) => {
   const { email } = req.body;
   try {
-    const user = await AuthUserModel.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    // Check if user is already verified in database
+    const existingUser = await AuthUserModel.findOne({ email });
+    if (existingUser && existingUser.isEmailVerified) {
+      return res.status(400).json({ message: "Email is already verified" });
     }
 
-    if (user.isEmailVerified) {
-      return res.status(400).json({ message: "Email is already verified" });
+    // Check if user is in pending verification
+    const pendingUser = pendingUsers.get(email);
+    if (!pendingUser) {
+      return res.status(404).json({
+        message: "No pending verification found. Please sign up first.",
+      });
     }
 
     const verificationCode = generateVerificationCode();
     const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    user.verificationCode = verificationCode;
-    user.verificationCodeExpires = verificationExpires;
-    await user.save();
+    // Update pending user with new code
+    pendingUser.verificationCode = verificationCode;
+    pendingUser.verificationCodeExpires = verificationExpires;
+    pendingUsers.set(email, pendingUser);
 
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
