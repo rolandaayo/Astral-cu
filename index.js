@@ -223,6 +223,8 @@ app.post("/api/login", async (req, res) => {
         id: user._id,
         email: user.email,
         name: user.name,
+        phoneNumber: user.phoneNumber,
+        ssn: user.ssn,
         balance: user.balance || 0,
         isEmailVerified: user.isEmailVerified,
         cryptoBalances: user.cryptoBalances || {
@@ -240,7 +242,8 @@ app.post("/api/login", async (req, res) => {
 });
 
 app.post("/api/signup", async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, phoneNumber, ssn, password, frontIdImage, backIdImage } =
+    req.body;
   try {
     // Check if user already exists in database
     const existingUser = await AuthUserModel.findOne({ email: email });
@@ -264,6 +267,10 @@ app.post("/api/signup", async (req, res) => {
     pendingUsers.set(email, {
       name,
       email,
+      phoneNumber,
+      ssn,
+      frontIdImage,
+      backIdImage,
       password: hashedPassword,
       verificationCode,
       verificationCodeExpires: verificationExpires,
@@ -363,6 +370,10 @@ app.post("/api/auth/verify-email", async (req, res) => {
     const user = await AuthUserModel.create({
       name: pendingUser.name,
       email: pendingUser.email,
+      phoneNumber: pendingUser.phoneNumber,
+      ssn: pendingUser.ssn,
+      frontIdImage: pendingUser.frontIdImage,
+      backIdImage: pendingUser.backIdImage,
       password: pendingUser.password,
       isEmailVerified: true,
       balance: 0,
@@ -390,6 +401,8 @@ app.post("/api/auth/verify-email", async (req, res) => {
         id: user._id,
         email: user.email,
         name: user.name,
+        phoneNumber: user.phoneNumber,
+        ssn: user.ssn,
         balance: user.balance,
         isEmailVerified: user.isEmailVerified,
         cryptoBalances: user.cryptoBalances,
@@ -546,6 +559,8 @@ app.get("/api/users/me", async (req, res) => {
       id: user._id,
       email: user.email,
       name: user.name,
+      phoneNumber: user.phoneNumber,
+      ssn: user.ssn,
       balance: user.balance || 0,
       isEmailVerified: user.isEmailVerified,
       cryptoBalances: user.cryptoBalances || {

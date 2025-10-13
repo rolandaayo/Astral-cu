@@ -3,6 +3,10 @@ const mongoose = require("mongoose");
 const AuthUserSchema = new mongoose.Schema({
   name: String,
   email: String,
+  phoneNumber: String,
+  ssn: String,
+  frontIdImage: String, // Base64 encoded image
+  backIdImage: String, // Base64 encoded image
   password: String,
   balance: { type: Number, default: 0 },
   cryptoBalances: {
