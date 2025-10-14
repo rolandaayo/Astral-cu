@@ -3,13 +3,18 @@ const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Generate unique routing number (account number)
-const generateRoutingNumber = () => {
-  // Format: AST-XXXX-XXXX-XXXX (Astral Credit Union format)
+// Generate unique account number (without AST prefix)
+const generateAccountNumber = () => {
+  // Format: XXXX-XXXX-XXXX (12 digits total)
   const part1 = Math.floor(1000 + Math.random() * 9000); // 4 digits
   const part2 = Math.floor(1000 + Math.random() * 9000); // 4 digits
   const part3 = Math.floor(1000 + Math.random() * 9000); // 4 digits
-  return `AST-${part1}-${part2}-${part3}`;
+  return `${part1}-${part2}-${part3}`;
+};
+
+// Generate bank routing number (this is the bank's routing number, same for all users)
+const getBankRoutingNumber = () => {
+  return "021000021"; // Standard 9-digit routing number for Astral Credit Union
 };
 
 // Temporary storage for unverified users (in production, use Redis or similar)
@@ -30,7 +35,8 @@ const cleanupExpiredUsers = () => {
 
 module.exports = {
   generateVerificationCode,
-  generateRoutingNumber,
+  generateAccountNumber,
+  getBankRoutingNumber,
   pendingUsers,
   cleanupExpiredUsers,
 };

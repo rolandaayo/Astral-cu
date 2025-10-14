@@ -5,7 +5,8 @@ const AuthUserSchema = new mongoose.Schema({
   email: String,
   phoneNumber: String,
   ssn: String,
-  routingNumber: { type: String, unique: true }, // Account/Routing number
+  accountNumber: { type: String, unique: true }, // User's unique account number
+  routingNumber: String, // Bank's routing number (same for all users)
   frontIdImage: String, // Cloudinary URL
   backIdImage: String, // Cloudinary URL
   password: String,

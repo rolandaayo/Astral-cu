@@ -16,6 +16,7 @@ const getCurrentUser = async (req, res) => {
       name: user.name,
       phoneNumber: user.phoneNumber,
       ssn: user.ssn,
+      accountNumber: user.accountNumber,
       routingNumber: user.routingNumber,
       balance: user.balance || 0,
       isEmailVerified: user.isEmailVerified,

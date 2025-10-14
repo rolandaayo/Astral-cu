@@ -5,7 +5,8 @@ const { sendVerificationEmail } = require("../utils/emailService");
 const { uploadToCloudinary } = require("../utils/cloudinaryService");
 const {
   generateVerificationCode,
-  generateRoutingNumber,
+  generateAccountNumber,
+  getBankRoutingNumber,
   pendingUsers,
 } = require("../utils/helpers");
 
@@ -44,6 +45,7 @@ const login = async (req, res) => {
         name: user.name,
         phoneNumber: user.phoneNumber,
         ssn: user.ssn,
+        accountNumber: user.accountNumber,
         routingNumber: user.routingNumber,
         balance: user.balance || 0,
         isEmailVerified: user.isEmailVerified,
@@ -211,16 +213,19 @@ const verifyEmail = async (req, res) => {
       });
     }
 
-    // Generate unique routing number
-    let routingNumber;
+    // Generate unique account number
+    let accountNumber;
     let isUnique = false;
     while (!isUnique) {
-      routingNumber = generateRoutingNumber();
-      const existingUser = await AuthUserModel.findOne({ routingNumber });
+      accountNumber = generateAccountNumber();
+      const existingUser = await AuthUserModel.findOne({ accountNumber });
       if (!existingUser) {
         isUnique = true;
       }
     }
+
+    // Get bank routing number (same for all users)
+    const bankRoutingNumber = getBankRoutingNumber();
 
     // Verification successful - now create the user in MongoDB
     const user = await AuthUserModel.create({
@@ -228,7 +233,8 @@ const verifyEmail = async (req, res) => {
       email: pendingUser.email,
       phoneNumber: pendingUser.phoneNumber,
       ssn: pendingUser.ssn,
-      routingNumber: routingNumber,
+      accountNumber: accountNumber,
+      routingNumber: bankRoutingNumber,
       frontIdImage: pendingUser.frontIdImage,
       backIdImage: pendingUser.backIdImage,
       password: pendingUser.password,
@@ -260,6 +266,7 @@ const verifyEmail = async (req, res) => {
         name: user.name,
         phoneNumber: user.phoneNumber,
         ssn: user.ssn,
+        accountNumber: user.accountNumber,
         routingNumber: user.routingNumber,
         balance: user.balance,
         isEmailVerified: user.isEmailVerified,
