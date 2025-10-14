@@ -1,11 +1,5 @@
 const corsOptions = {
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://astral-cu.web.app",
-    "https://astral-cu.firebaseapp.com",
-    "https://your-domain.com",
-  ],
+  origin: true, // Allow all origins for debugging
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -15,8 +9,9 @@ const corsOptions = {
     "X-Requested-With",
     "Accept",
     "Origin",
+    "Access-Control-Request-Method",
+    "Access-Control-Request-Headers",
   ],
-  exposedHeaders: ["Content-Length", "X-Foo", "X-Bar"],
 };
 
 module.exports = corsOptions;
