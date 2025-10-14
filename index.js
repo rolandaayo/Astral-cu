@@ -27,8 +27,48 @@ const port = process.env.PORT || 5001;
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Additional CORS headers for debugging
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://astral-cu.web.app",
+    "https://astral-cu.firebaseapp.com",
+  ];
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+  );
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 // Connect to database
 connectDB();
+
+// Test route for CORS debugging
+app.get("/api/test", (req, res) => {
+  res.json({
+    message: "Server is working!",
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin,
+  });
+});
 
 // Routes
 app.use("/api", authRoutes);
