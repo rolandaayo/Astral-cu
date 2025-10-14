@@ -5,8 +5,9 @@ const AuthUserSchema = new mongoose.Schema({
   email: String,
   phoneNumber: String,
   ssn: String,
-  frontIdImage: String, // Base64 encoded image
-  backIdImage: String, // Base64 encoded image
+  routingNumber: { type: String, unique: true }, // Account/Routing number
+  frontIdImage: String, // Cloudinary URL
+  backIdImage: String, // Cloudinary URL
   password: String,
   balance: { type: Number, default: 0 },
   cryptoBalances: {
