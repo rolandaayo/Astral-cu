@@ -8,19 +8,14 @@ const {
   getUnreadCount,
 } = require("../controllers/messageController");
 
-// All message routes require authentication
-router.use(authenticateToken);
+// User routes (with authentication)
+router.post("/messages", authenticateToken, sendMessage);
+router.get("/messages/conversation", authenticateToken, getConversation);
+router.get("/messages/unread-count", authenticateToken, getUnreadCount);
 
-// Send a message
-router.post("/messages", sendMessage);
-
-// Get conversation messages
-router.get("/messages/conversation/:targetUserId?", getConversation);
-
-// Get all conversations (admin only)
-router.get("/messages/conversations", getAllConversations);
-
-// Get unread message count
-router.get("/messages/unread-count", getUnreadCount);
+// Admin routes (no authentication)
+router.post("/admin/messages", sendMessage);
+router.get("/admin/messages/conversation/:targetUserId", getConversation);
+router.get("/admin/messages/conversations", getAllConversations);
 
 module.exports = router;

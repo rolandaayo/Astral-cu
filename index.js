@@ -34,6 +34,7 @@ connectDB();
 app.use("/api", authRoutes);
 app.use("/api", adminRoutes);
 app.use("/api", messageRoutes);
+app.use("/api", userRoutes); // Add /api prefix for consistency
 app.use(userRoutes); // Legacy routes without /api prefix
 
 // Start cleanup system

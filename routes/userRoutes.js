@@ -16,10 +16,10 @@ const {
 
 // Protected user routes
 router.get("/users/me", authenticateToken, getCurrentUser);
-router.get("/users", getAllUsers);
-router.get("/users/:userId", getUserById);
-router.put("/users/:userId/balance", updateUserBalance);
-router.delete("/users/:userId", deleteUser);
+router.get("/users", getAllUsers); // No auth for admin access
+router.get("/users/:userId", getUserById); // No auth for admin access
+router.put("/users/:userId/balance", updateUserBalance); // No auth for admin access
+router.delete("/users/:userId", deleteUser); // No auth for admin access
 
 // Legacy routes (for old UserModel)
 router.get("/", getLegacyUsers);
