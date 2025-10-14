@@ -94,10 +94,18 @@ try {
   const messageRoutes = require("./routes/messageRoutes");
 
   // Connect to database
-  connectDB().catch((err) => {
-    console.error("Database connection failed:", err);
-    // Don't crash the server, just log the error
-  });
+  connectDB()
+    .then((result) => {
+      if (result !== false) {
+        console.log("✅ Database connected successfully");
+      } else {
+        console.log("⚠️ Database connection failed, but server continues");
+      }
+    })
+    .catch((err) => {
+      console.error("❌ Database connection failed:", err);
+      console.log("⚠️ Server continues without database");
+    });
 
   // Routes with individual error handling
   try {

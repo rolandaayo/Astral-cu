@@ -29,7 +29,14 @@ const connectDB = async () => {
     console.log("💰 Daily balance top-up system initialized");
   } catch (error) {
     console.error("❌ MongoDB connection error:", error);
-    process.exit(1);
+    console.log("⚠️ Server will continue without database connection");
+    console.log("🔧 To fix this:");
+    console.log("1. Go to MongoDB Atlas dashboard");
+    console.log("2. Navigate to Network Access");
+    console.log("3. Add your current IP address to the whitelist");
+    console.log("4. Or add 0.0.0.0/0 to allow all IPs (less secure)");
+    // Don't exit the process, let the server continue
+    return false;
   }
 };
 
