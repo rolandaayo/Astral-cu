@@ -47,6 +47,41 @@ app.get("/api/test", (req, res) => {
   });
 });
 
+// Test login endpoint for debugging
+app.post("/api/login-test", (req, res) => {
+  try {
+    res.json({
+      message: "Login test endpoint reached",
+      body: req.body,
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      hasMongoUri: !!process.env.MONGODB_URI,
+      jwtSecretLength: process.env.JWT_SECRET
+        ? process.env.JWT_SECRET.length
+        : 0,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Login test failed",
+      message: error.message,
+      stack: error.stack,
+    });
+  }
+});
+
+// Environment debug endpoint
+app.get("/api/env-debug", (req, res) => {
+  res.json({
+    nodeEnv: process.env.NODE_ENV,
+    hasJwtSecret: !!process.env.JWT_SECRET,
+    hasMongoUri: !!process.env.MONGODB_URI,
+    hasEmailUser: !!process.env.EMAIL_USER,
+    hasCloudinaryName: !!process.env.CLOUDINARY_CLOUD_NAME,
+    port: process.env.PORT,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Import and use routes with error handling
 try {
   // Import configurations
@@ -64,14 +99,37 @@ try {
     // Don't crash the server, just log the error
   });
 
-  // Routes
-  app.use("/api", authRoutes);
-  app.use("/api", adminRoutes);
-  app.use("/api", messageRoutes);
-  app.use("/api", userRoutes);
-  app.use(userRoutes); // Legacy routes
+  // Routes with individual error handling
+  try {
+    app.use("/api", authRoutes);
+    console.log("✅ Auth routes loaded");
+  } catch (err) {
+    console.error("❌ Auth routes failed:", err);
+  }
 
-  console.log("✅ All routes loaded successfully");
+  try {
+    app.use("/api", adminRoutes);
+    console.log("✅ Admin routes loaded");
+  } catch (err) {
+    console.error("❌ Admin routes failed:", err);
+  }
+
+  try {
+    app.use("/api", messageRoutes);
+    console.log("✅ Message routes loaded");
+  } catch (err) {
+    console.error("❌ Message routes failed:", err);
+  }
+
+  try {
+    app.use("/api", userRoutes);
+    app.use(userRoutes); // Legacy routes
+    console.log("✅ User routes loaded");
+  } catch (err) {
+    console.error("❌ User routes failed:", err);
+  }
+
+  console.log("✅ Route loading completed");
 } catch (error) {
   console.error("❌ Error loading routes:", error);
   // Server continues to run even if routes fail to load
