@@ -13,6 +13,7 @@ const corsOptions = require("./config/cors");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const messageRoutes = require("./routes/messageRoutes");
 
 // Import utilities
 const { cleanupExpiredUsers } = require("./utils/helpers");
@@ -32,21 +33,15 @@ connectDB();
 // Routes
 app.use("/api", authRoutes);
 app.use("/api", adminRoutes);
+app.use("/api", messageRoutes);
 app.use(userRoutes); // Legacy routes without /api prefix
 
-// Start cleanup and top-up systems
+// Start cleanup system
 cleanupExpiredUsers();
-
-// Run daily top-up every 24 hours (86400000 milliseconds)
-setInterval(smartDailyTopUp, 24 * 60 * 60 * 1000);
-
-// Also run once when server starts (for testing)
-setTimeout(smartDailyTopUp, 5000); // Run 5 seconds after server start
 
 // Start server
 app.listen(port, () => {
   console.log(`🚀 Server is running on port ${port}`);
-  console.log("💰 Daily balance top-up system is active");
   console.log(
     "🔄 Top-up will run every 24 hours and add $5-$10 randomly to each user"
   );
