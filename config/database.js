@@ -6,36 +6,24 @@ const connectDB = async () => {
     const clientOptions = {
       serverApi: { version: "1", strict: true, deprecationErrors: true },
       maxPoolSize: 10, // Maintain up to 10 socket connections
-      serverSelectionTimeoutMS: 30000, // Keep trying to send operations for 30 seconds
+      serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-      bufferMaxEntries: -1, // Enable mongoose buffering for serverless
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
     };
-
-    // Set mongoose options
-    mongoose.set("strictQuery", false);
 
     await mongoose.connect(uri, clientOptions);
     await mongoose.connection.db.admin().command({ ping: 1 });
     console.log("✅ Successfully connected to MongoDB!");
 
     // Start top-up system only after successful database connection
-    try {
-      const { smartDailyTopUp } = require("../controllers/adminController");
+    const { smartDailyTopUp } = require("../controllers/adminController");
 
-      // Run daily top-up every 24 hours (86400000 milliseconds)
-      setInterval(smartDailyTopUp, 24 * 60 * 60 * 1000);
+    // Run daily top-up every 24 hours (86400000 milliseconds)
+    setInterval(smartDailyTopUp, 24 * 60 * 60 * 1000);
 
-      // Also run once when server starts (for testing) - wait 10 seconds to ensure everything is ready
-      setTimeout(smartDailyTopUp, 10000);
+    // Also run once when server starts (for testing) - wait 10 seconds to ensure everything is ready
+    setTimeout(smartDailyTopUp, 10000);
 
-      console.log("💰 Daily balance top-up system initialized");
-    } catch (topUpError) {
-      console.log("⚠️ Top-up system failed to initialize:", topUpError.message);
-    }
-
-    return true;
+    console.log("💰 Daily balance top-up system initialized");
   } catch (error) {
     console.error("❌ MongoDB connection error:", error);
     console.log("⚠️ Server will continue without database connection");

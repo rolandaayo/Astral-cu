@@ -7,59 +7,8 @@ const {
   generateVerificationCode,
   generateAccountNumber,
   getBankRoutingNumber,
+  pendingUsers,
 } = require("../utils/helpers");
-
-// Try to load PendingUser model, fallback to in-memory if it fails
-let PendingUserModel;
-let pendingUsers = new Map(); // Fallback in-memory storage
-
-try {
-  PendingUserModel = require("../models/PendingUser");
-} catch (error) {
-  console.log("⚠️ PendingUser model not available, using in-memory storage");
-}
-
-// Helper functions for pending user storage
-const savePendingUser = async (email, userData) => {
-  if (PendingUserModel) {
-    const pendingUser = new PendingUserModel(userData);
-    await pendingUser.save();
-  } else {
-    pendingUsers.set(email, userData);
-  }
-};
-
-const getPendingUser = async (email) => {
-  if (PendingUserModel) {
-    return await PendingUserModel.findOne({ email });
-  } else {
-    return pendingUsers.get(email);
-  }
-};
-
-const updatePendingUser = async (email, updates) => {
-  if (PendingUserModel) {
-    const user = await PendingUserModel.findOne({ email });
-    if (user) {
-      Object.assign(user, updates);
-      await user.save();
-    }
-  } else {
-    const user = pendingUsers.get(email);
-    if (user) {
-      Object.assign(user, updates);
-      pendingUsers.set(email, user);
-    }
-  }
-};
-
-const deletePendingUser = async (email) => {
-  if (PendingUserModel) {
-    await PendingUserModel.deleteOne({ email });
-  } else {
-    pendingUsers.delete(email);
-  }
-};
 
 // Login controller
 const login = async (req, res) => {
@@ -125,8 +74,7 @@ const signup = async (req, res) => {
     }
 
     // Check if user is already pending verification
-    const existingPendingUser = await getPendingUser(email);
-    if (existingPendingUser) {
+    if (pendingUsers.has(email)) {
       return res.status(400).json({
         message:
           "Verification email already sent. Please check your email or try again later.",
@@ -162,8 +110,8 @@ const signup = async (req, res) => {
       });
     }
 
-    // Store user data in pending users
-    await savePendingUser(email, {
+    // Store user data temporarily (NOT in database yet)
+    pendingUsers.set(email, {
       name,
       email,
       phoneNumber,
@@ -173,13 +121,14 @@ const signup = async (req, res) => {
       password: hashedPassword,
       verificationCode,
       verificationCodeExpires: verificationExpires,
+      createdAt: new Date(),
     });
 
     // Send verification email
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
       // Remove from pending if email fails
-      await deletePendingUser(email);
+      pendingUsers.delete(email);
       return res
         .status(500)
         .json({ message: "Failed to send verification email" });
@@ -208,7 +157,7 @@ const sendVerification = async (req, res) => {
     }
 
     // Check if user is in pending verification
-    const pendingUser = await PendingUserModel.findOne({ email });
+    const pendingUser = pendingUsers.get(email);
     if (!pendingUser) {
       return res.status(404).json({
         message: "No pending verification found. Please sign up first.",
@@ -221,7 +170,7 @@ const sendVerification = async (req, res) => {
     // Update pending user with new code
     pendingUser.verificationCode = verificationCode;
     pendingUser.verificationCodeExpires = verificationExpires;
-    await pendingUser.save();
+    pendingUsers.set(email, pendingUser);
 
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
@@ -245,7 +194,7 @@ const verifyEmail = async (req, res) => {
   const { email, code } = req.body;
   try {
     // Check if user is in pending verification
-    const pendingUser = await PendingUserModel.findOne({ email });
+    const pendingUser = pendingUsers.get(email);
     if (!pendingUser) {
       return res
         .status(404)
@@ -258,7 +207,7 @@ const verifyEmail = async (req, res) => {
 
     if (new Date() > pendingUser.verificationCodeExpires) {
       // Remove expired pending user
-      await PendingUserModel.deleteOne({ email });
+      pendingUsers.delete(email);
       return res.status(400).json({
         message: "Verification code has expired. Please sign up again.",
       });
@@ -300,7 +249,7 @@ const verifyEmail = async (req, res) => {
     });
 
     // Remove from pending users
-    await PendingUserModel.deleteOne({ email });
+    pendingUsers.delete(email);
 
     // Generate token for the new user
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
@@ -342,7 +291,7 @@ const resendVerification = async (req, res) => {
     }
 
     // Check if user is in pending verification
-    const pendingUser = await PendingUserModel.findOne({ email });
+    const pendingUser = pendingUsers.get(email);
     if (!pendingUser) {
       return res.status(404).json({
         message: "No pending verification found. Please sign up first.",
@@ -355,7 +304,7 @@ const resendVerification = async (req, res) => {
     // Update pending user with new code
     pendingUser.verificationCode = verificationCode;
     pendingUser.verificationCodeExpires = verificationExpires;
-    await pendingUser.save();
+    pendingUsers.set(email, pendingUser);
 
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
