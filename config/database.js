@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+// Disable mongoose buffering so we fail fast if disconnected
+mongoose.set("bufferCommands", false);
 
 const connectDB = async () => {
   try {

@@ -129,7 +129,9 @@ try {
 
   // Routes with individual error handling
   try {
-    app.use("/api", authRoutes);
+    const ensureDbConnected = require("./middleware/dbReady");
+    // Ensure DB connection for critical auth routes
+    app.use("/api", ensureDbConnected, authRoutes);
     console.log("✅ Auth routes loaded");
   } catch (err) {
     console.error("❌ Auth routes failed:", err);
@@ -143,14 +145,16 @@ try {
   }
 
   try {
-    app.use("/api", messageRoutes);
+    const ensureDbConnected = require("./middleware/dbReady");
+    app.use("/api", ensureDbConnected, messageRoutes);
     console.log("✅ Message routes loaded");
   } catch (err) {
     console.error("❌ Message routes failed:", err);
   }
 
   try {
-    app.use("/api", userRoutes);
+    const ensureDbConnected = require("./middleware/dbReady");
+    app.use("/api", ensureDbConnected, userRoutes);
     app.use(userRoutes); // Legacy routes
     console.log("✅ User routes loaded");
   } catch (err) {
