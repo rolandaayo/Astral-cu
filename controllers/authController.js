@@ -32,6 +32,12 @@ const login = async (req, res) => {
       });
     }
 
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        message: "Server configuration error: JWT_SECRET is missing",
+      });
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
@@ -252,6 +258,11 @@ const verifyEmail = async (req, res) => {
     await PendingUserModel.deleteOne({ email });
 
     // Generate token for the new user
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        message: "Server configuration error: JWT_SECRET is missing",
+      });
+    }
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1h",
     });
