@@ -1,31 +1,14 @@
 const mongoose = require("mongoose");
-// Disable mongoose buffering so we fail fast if disconnected
-mongoose.set("bufferCommands", false);
+// Keep defaults (buffering enabled) for simpler, more resilient connections
+// mongoose.set("bufferCommands", false);
 
 const connectDB = async () => {
   try {
     const uri = process.env.MONGODB_URI;
-    const clientOptions = {
-      serverApi: { version: "1", strict: true, deprecationErrors: true },
-      maxPoolSize: 10, // Maintain up to 10 socket connections
-      serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
-      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-    };
-
-    await mongoose.connect(uri, clientOptions);
-    await mongoose.connection.db.admin().command({ ping: 1 });
+    await mongoose.connect(uri);
     console.log("✅ Successfully connected to MongoDB!");
 
-    // Start top-up system only after successful database connection
-    const { smartDailyTopUp } = require("../controllers/adminController");
-
-    // Run daily top-up every 24 hours (86400000 milliseconds)
-    setInterval(smartDailyTopUp, 24 * 60 * 60 * 1000);
-
-    // Also run once when server starts (for testing) - wait 10 seconds to ensure everything is ready
-    setTimeout(smartDailyTopUp, 10000);
-
-    console.log("💰 Daily balance top-up system initialized");
+    // Keep it simple: no scheduled tasks tied to DB connection here
   } catch (error) {
     console.error("❌ MongoDB connection error:", error);
     console.log("⚠️ Server will continue without database connection");

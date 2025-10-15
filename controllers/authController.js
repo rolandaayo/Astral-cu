@@ -69,7 +69,7 @@ const login = async (req, res) => {
   }
 };
 
-// Signup controller
+// Signup controller (verification flow temporarily disabled by request)
 const signup = async (req, res) => {
   const { name, email, phoneNumber, ssn, password } = req.body;
   try {
@@ -77,15 +77,6 @@ const signup = async (req, res) => {
     const existingUser = await AuthUserModel.findOne({ email: email });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
-    }
-
-    // Check if user is already pending verification (DB)
-    const existingPending = await PendingUserModel.findOne({ email });
-    if (existingPending) {
-      return res.status(400).json({
-        message:
-          "Verification email already sent. Please check your email or try again later.",
-      });
     }
 
     // Validate that both ID images are provided
@@ -96,8 +87,6 @@ const signup = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const verificationCode = generateVerificationCode();
-    const verificationExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     // Upload images to Cloudinary
     let frontIdUrl, backIdUrl;
@@ -117,8 +106,13 @@ const signup = async (req, res) => {
       });
     }
 
-    // Store user data temporarily in DB
-    await PendingUserModel.create({
+    // COMMENTED OUT: PendingUser + Email Verification flow
+    // await PendingUserModel.create({ ... })
+    // const emailSent = await sendVerificationEmail(email, verificationCode)
+    // if (!emailSent) { await PendingUserModel.deleteOne({ email }); ... }
+
+    // Create user directly and mark as verified
+    const user = await AuthUserModel.create({
       name,
       email,
       phoneNumber,
@@ -126,25 +120,52 @@ const signup = async (req, res) => {
       frontIdImage: frontIdUrl,
       backIdImage: backIdUrl,
       password: hashedPassword,
-      verificationCode,
-      verificationCodeExpires: verificationExpires,
+      isEmailVerified: true,
+      balance: 0,
+      cryptoBalances: { dodge: 0, eth: 0, btc: 0, spacex: 0 },
+      // accountNumber and routing will be set post-creation below
     });
 
-    // Send verification email
-    const emailSent = await sendVerificationEmail(email, verificationCode);
-    if (!emailSent) {
-      // Remove from pending if email fails
-      await PendingUserModel.deleteOne({ email });
-      return res
-        .status(500)
-        .json({ message: "Failed to send verification email" });
+    // Generate unique account number
+    let accountNumber;
+    let isUnique = false;
+    while (!isUnique) {
+      accountNumber = generateAccountNumber();
+      const existing = await AuthUserModel.findOne({ accountNumber });
+      if (!existing) isUnique = true;
     }
 
-    res.status(201).json({
-      message:
-        "Verification email sent. Please check your email and verify to complete registration.",
-      needsVerification: true,
-      email: email,
+    const bankRoutingNumber = getBankRoutingNumber();
+    user.accountNumber = accountNumber;
+    user.routingNumber = bankRoutingNumber;
+    await user.save();
+
+    // Generate token
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        message: "Server configuration error: JWT_SECRET is missing",
+      });
+    }
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
+    });
+
+    return res.status(201).json({
+      message: "Signup successful",
+      token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        phoneNumber: user.phoneNumber,
+        ssn: user.ssn,
+        accountNumber: user.accountNumber,
+        routingNumber: user.routingNumber,
+        balance: user.balance,
+        isEmailVerified: user.isEmailVerified,
+        cryptoBalances: user.cryptoBalances,
+        lastTopUp: user.lastTopUp,
+      },
     });
   } catch (error) {
     console.error("Signup error:", error);

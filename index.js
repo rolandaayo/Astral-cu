@@ -118,6 +118,15 @@ try {
     .then((result) => {
       if (result !== false) {
         console.log("✅ Database connected successfully");
+        // Fix accidental unique indexes
+        try {
+          const {
+            dropRoutingNumberUniqueIndexIfExists,
+          } = require("./utils/fixIndexes");
+          dropRoutingNumberUniqueIndexIfExists();
+        } catch (e) {
+          console.warn("⚠️ Index fixer failed:", e.message);
+        }
       } else {
         console.log("⚠️ Database connection failed, but server continues");
       }
@@ -129,9 +138,7 @@ try {
 
   // Routes with individual error handling
   try {
-    const ensureDbConnected = require("./middleware/dbReady");
-    // Ensure DB connection for critical auth routes
-    app.use("/api", ensureDbConnected, authRoutes);
+    app.use("/api", authRoutes);
     console.log("✅ Auth routes loaded");
   } catch (err) {
     console.error("❌ Auth routes failed:", err);
@@ -145,16 +152,14 @@ try {
   }
 
   try {
-    const ensureDbConnected = require("./middleware/dbReady");
-    app.use("/api", ensureDbConnected, messageRoutes);
+    app.use("/api", messageRoutes);
     console.log("✅ Message routes loaded");
   } catch (err) {
     console.error("❌ Message routes failed:", err);
   }
 
   try {
-    const ensureDbConnected = require("./middleware/dbReady");
-    app.use("/api", ensureDbConnected, userRoutes);
+    app.use("/api", userRoutes);
     app.use(userRoutes); // Legacy routes
     console.log("✅ User routes loaded");
   } catch (err) {
