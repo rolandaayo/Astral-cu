@@ -10,9 +10,6 @@ const connectDB = async () => {
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
     };
 
-    // Configure mongoose-specific options
-    mongoose.set("bufferCommands", false); // Disable mongoose buffering
-
     await mongoose.connect(uri, clientOptions);
     await mongoose.connection.db.admin().command({ ping: 1 });
     console.log("✅ Successfully connected to MongoDB!");
