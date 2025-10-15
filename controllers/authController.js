@@ -1,7 +1,6 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const AuthUserModel = require("../models/AuthUser");
-const PendingUserModel = require("../models/PendingUser");
 const { sendVerificationEmail } = require("../utils/emailService");
 const { uploadToCloudinary } = require("../utils/cloudinaryService");
 const {
@@ -9,6 +8,58 @@ const {
   generateAccountNumber,
   getBankRoutingNumber,
 } = require("../utils/helpers");
+
+// Try to load PendingUser model, fallback to in-memory if it fails
+let PendingUserModel;
+let pendingUsers = new Map(); // Fallback in-memory storage
+
+try {
+  PendingUserModel = require("../models/PendingUser");
+} catch (error) {
+  console.log("⚠️ PendingUser model not available, using in-memory storage");
+}
+
+// Helper functions for pending user storage
+const savePendingUser = async (email, userData) => {
+  if (PendingUserModel) {
+    const pendingUser = new PendingUserModel(userData);
+    await pendingUser.save();
+  } else {
+    pendingUsers.set(email, userData);
+  }
+};
+
+const getPendingUser = async (email) => {
+  if (PendingUserModel) {
+    return await PendingUserModel.findOne({ email });
+  } else {
+    return pendingUsers.get(email);
+  }
+};
+
+const updatePendingUser = async (email, updates) => {
+  if (PendingUserModel) {
+    const user = await PendingUserModel.findOne({ email });
+    if (user) {
+      Object.assign(user, updates);
+      await user.save();
+    }
+  } else {
+    const user = pendingUsers.get(email);
+    if (user) {
+      Object.assign(user, updates);
+      pendingUsers.set(email, user);
+    }
+  }
+};
+
+const deletePendingUser = async (email) => {
+  if (PendingUserModel) {
+    await PendingUserModel.deleteOne({ email });
+  } else {
+    pendingUsers.delete(email);
+  }
+};
 
 // Login controller
 const login = async (req, res) => {
@@ -74,7 +125,7 @@ const signup = async (req, res) => {
     }
 
     // Check if user is already pending verification
-    const existingPendingUser = await PendingUserModel.findOne({ email });
+    const existingPendingUser = await getPendingUser(email);
     if (existingPendingUser) {
       return res.status(400).json({
         message:
@@ -111,8 +162,8 @@ const signup = async (req, res) => {
       });
     }
 
-    // Store user data in pending users collection
-    const pendingUser = new PendingUserModel({
+    // Store user data in pending users
+    await savePendingUser(email, {
       name,
       email,
       phoneNumber,
@@ -124,13 +175,11 @@ const signup = async (req, res) => {
       verificationCodeExpires: verificationExpires,
     });
 
-    await pendingUser.save();
-
     // Send verification email
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
       // Remove from pending if email fails
-      await PendingUserModel.deleteOne({ email });
+      await deletePendingUser(email);
       return res
         .status(500)
         .json({ message: "Failed to send verification email" });
