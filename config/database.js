@@ -6,13 +6,21 @@ const connectDB = async () => {
     const clientOptions = {
       serverApi: { version: "1", strict: true, deprecationErrors: true },
       maxPoolSize: 10, // Maintain up to 10 socket connections
-      serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+      serverSelectionTimeoutMS: 30000, // Keep trying to send operations for 30 seconds
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+      bufferMaxEntries: 0, // Disable mongoose buffering
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
     };
+
+    // Set mongoose options
+    mongoose.set("strictQuery", false);
 
     await mongoose.connect(uri, clientOptions);
     await mongoose.connection.db.admin().command({ ping: 1 });
     console.log("✅ Successfully connected to MongoDB!");
+
+    return true;
 
     // Start top-up system only after successful database connection
     const { smartDailyTopUp } = require("../controllers/adminController");
