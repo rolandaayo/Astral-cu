@@ -287,7 +287,11 @@ const verifyEmail = async (req, res) => {
     });
   } catch (error) {
     console.error("Verify email error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({
+      message: "Server error during verification",
+      hint: "This can be caused by expired code, missing pending user, or DB connectivity.",
+      error: error.message,
+    });
   }
 };
 

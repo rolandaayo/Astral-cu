@@ -82,6 +82,26 @@ app.get("/api/env-debug", (req, res) => {
   });
 });
 
+// Database connection status
+app.get("/api/db-status", (req, res) => {
+  try {
+    const mongoose = require("mongoose");
+    const state = mongoose.connection.readyState; // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+    res.json({
+      readyState: state,
+      states: {
+        0: "disconnected",
+        1: "connected",
+        2: "connecting",
+        3: "disconnecting",
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "db-status failed", error: error.message });
+  }
+});
+
 // Import and use routes with error handling
 try {
   // Import configurations
