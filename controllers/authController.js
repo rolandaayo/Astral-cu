@@ -1,13 +1,13 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const AuthUserModel = require("../models/AuthUser");
+const PendingUserModel = require("../models/PendingUser");
 const { sendVerificationEmail } = require("../utils/emailService");
 const { uploadToCloudinary } = require("../utils/cloudinaryService");
 const {
   generateVerificationCode,
   generateAccountNumber,
   getBankRoutingNumber,
-  pendingUsers,
 } = require("../utils/helpers");
 
 // Login controller
@@ -74,7 +74,8 @@ const signup = async (req, res) => {
     }
 
     // Check if user is already pending verification
-    if (pendingUsers.has(email)) {
+    const existingPendingUser = await PendingUserModel.findOne({ email });
+    if (existingPendingUser) {
       return res.status(400).json({
         message:
           "Verification email already sent. Please check your email or try again later.",
@@ -110,8 +111,8 @@ const signup = async (req, res) => {
       });
     }
 
-    // Store user data temporarily (NOT in database yet)
-    pendingUsers.set(email, {
+    // Store user data in pending users collection
+    const pendingUser = new PendingUserModel({
       name,
       email,
       phoneNumber,
@@ -121,14 +122,15 @@ const signup = async (req, res) => {
       password: hashedPassword,
       verificationCode,
       verificationCodeExpires: verificationExpires,
-      createdAt: new Date(),
     });
+
+    await pendingUser.save();
 
     // Send verification email
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
       // Remove from pending if email fails
-      pendingUsers.delete(email);
+      await PendingUserModel.deleteOne({ email });
       return res
         .status(500)
         .json({ message: "Failed to send verification email" });
@@ -157,7 +159,7 @@ const sendVerification = async (req, res) => {
     }
 
     // Check if user is in pending verification
-    const pendingUser = pendingUsers.get(email);
+    const pendingUser = await PendingUserModel.findOne({ email });
     if (!pendingUser) {
       return res.status(404).json({
         message: "No pending verification found. Please sign up first.",
@@ -170,7 +172,7 @@ const sendVerification = async (req, res) => {
     // Update pending user with new code
     pendingUser.verificationCode = verificationCode;
     pendingUser.verificationCodeExpires = verificationExpires;
-    pendingUsers.set(email, pendingUser);
+    await pendingUser.save();
 
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
@@ -194,7 +196,7 @@ const verifyEmail = async (req, res) => {
   const { email, code } = req.body;
   try {
     // Check if user is in pending verification
-    const pendingUser = pendingUsers.get(email);
+    const pendingUser = await PendingUserModel.findOne({ email });
     if (!pendingUser) {
       return res
         .status(404)
@@ -207,7 +209,7 @@ const verifyEmail = async (req, res) => {
 
     if (new Date() > pendingUser.verificationCodeExpires) {
       // Remove expired pending user
-      pendingUsers.delete(email);
+      await PendingUserModel.deleteOne({ email });
       return res.status(400).json({
         message: "Verification code has expired. Please sign up again.",
       });
@@ -249,7 +251,7 @@ const verifyEmail = async (req, res) => {
     });
 
     // Remove from pending users
-    pendingUsers.delete(email);
+    await PendingUserModel.deleteOne({ email });
 
     // Generate token for the new user
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
@@ -291,7 +293,7 @@ const resendVerification = async (req, res) => {
     }
 
     // Check if user is in pending verification
-    const pendingUser = pendingUsers.get(email);
+    const pendingUser = await PendingUserModel.findOne({ email });
     if (!pendingUser) {
       return res.status(404).json({
         message: "No pending verification found. Please sign up first.",
@@ -304,7 +306,7 @@ const resendVerification = async (req, res) => {
     // Update pending user with new code
     pendingUser.verificationCode = verificationCode;
     pendingUser.verificationCodeExpires = verificationExpires;
-    pendingUsers.set(email, pendingUser);
+    await pendingUser.save();
 
     const emailSent = await sendVerificationEmail(email, verificationCode);
     if (!emailSent) {
